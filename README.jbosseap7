@@ -1,0 +1,726 @@
+
+Java 6 code base with 
+
+Goal is to upgrade with the minimum effort but create a security layer as SSO.
+
+Practical Steps to upgrade as is
+
+1. Clean up pom, ensure dependencies are clean and inherited 
+1. Upgrade the maven pom.xml plugins and source to 1.8
+2. Convert OpenJPA to Hibernate - see this guide
+3. Use dependency management
+4. Opt to use AMQ external to JBOSS EAP 7 to allow 
+5. Opt to find libraries within JBOSS EAP 7 first, and catalog them for future reference
+6. Easier to comment out dependencies which do not fit the mould in Java 8/EAP 7
+
+7. Maven with EAP 7
+https://access.redhat.com/documentation/en-us/red_hat_jboss_enterprise_application_platform/7.1/html/development_guide/using_maven_with_eap
+
+9. pick and choose upgraded libs
+Maven Compiler Plugin 3.8
+Maven Enforcer plugin
+Junit - 4
+
+If in doubt search maven repo <lib name>
+
+Try to centralise dependencies consistently in another pom (ideally ) or at the top level project
+
+8a. change the version mvn versions:set -DnewVersion=2.2.1-eap7
+
+
+8b. Solve all maven errors as you go -
+
+9. 
+
+10. Get to a mvn clean , commenting out whatever dependencies -
+- removed bundle OSGI
+- libs not 
+- 
+
+11. Then look at the order of compiling and work way through util
+[INFO] DayTrader :: Performance Benchmark Sample 2.2.1-eap7 SUCCESS [  0.140 s]
+[INFO] DayTrader :: Modules ............................... SUCCESS [  0.002 s]
+[INFO] DayTrader :: Modules - Util ........................ SUCCESS [  0.002 s]
+[INFO] DayTrader :: Modules - Beans ....................... SUCCESS [  0.004 s]
+[INFO] DayTrader :: Modules - Entities .................... SUCCESS [  0.003 s]
+[INFO] DayTrader :: Modules - Core ........................ SUCCESS [  0.003 s]
+[INFO] DayTrader :: Modules - EJB3 ........................ SUCCESS [  0.004 s]
+[INFO] DayTrader :: Modules - WS Application Client ....... SUCCESS [  0.002 s]
+[INFO] DayTrader :: Modules - SOAP ........................ SUCCESS [  0.004 s]
+[INFO] DayTrader :: Modules - Web ......................... SUCCESS [  0.003 s]
+[INFO] DayTrader :: Modules - Quote Streamer .............. SUCCESS [  0.003 s]
+[INFO] DayTrader :: Modules - JSON Proxy .................. SUCCESS [  0.003 s]
+[INFO] DayTrader :: Assemblies ............................ SUCCESS [  0.003 s]
+[INFO] DayTrader :: Assemblies for JavaEE ................. SUCCESS [  0.003 s]
+[INFO] DayTrader :: Assemblies - JavaEE WAR ............... SUCCESS [  0.003 s]
+[INFO] DayTrader :: Assemblies - JavaEE EAR ............... SUCCESS [  0.003 s]
+[INFO] Daytrader plans .................................... SUCCESS [  0.003 s]
+[INFO] DayTrader :: Assemblies for Web containers ......... SUCCESS [  0.003 s]
+[INFO] DayTrader :: Assemblies - Web + Direct JDBC ........ SUCCESS [  1.610 s]
+[INFO] DayTrader :: Assemblies - Web + Direct JPA 2.2.1-eap7 SUCCESS [  0.004 s]
+[INFO] ------------------------------------------------------------------------
+
+12. Change logging to slf4j - this is an implicit dependency within JBOSS EAP - see this link
+
+13.
+Review code and mark TODOs for review
+i.e Iterators can more than likely be removed - a nice thing to do
+extending java objects such as HashMap or List is not ideal, better to rewrite/wrap or use concurrent instead on own synchronisation code - maintenance
+
+
+
+14. mvn install - util compiles and beans
+INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary:
+[INFO] 
+[INFO] DayTrader :: Performance Benchmark Sample 2.2.1-eap7 SUCCESS [  6.186 s]
+[INFO] DayTrader :: Modules ............................... SUCCESS [  0.011 s]
+[INFO] DayTrader :: Modules - Util ........................ SUCCESS [  1.564 s]
+[INFO] DayTrader :: Modules - Beans ....................... SUCCESS [  0.241 s]
+[INFO] DayTrader :: Modules - Entities .................... FAILURE [  0.267 s]
+[INFO] DayTrader :: Modules - Core ........................ SKIPPED
+[INFO] DayTrader :: Modules - EJB3 ........................ SKIPPED
+[INFO] DayTrader :: Modules - WS Application Client ....... SKIPPED
+[INFO] DayTrader :: Modules - SOAP ........................ SKIPPED
+[INFO] DayTrader :: Modules - Web ......................... SKIPPED
+[INFO] DayTrader :: Modules - Quote Streamer .............. SKIPPED
+[INFO] DayTrader :: Modules - JSON Proxy .................. SKIPPED
+[INFO] DayTrader :: Assemblies ............................ SKIPPED
+[INFO] DayTrader :: Assemblies for JavaEE ................. SKIPPED
+[INFO] DayTrader :: Assemblies - JavaEE WAR ............... SKIPPED
+[INFO] DayTrader :: Assemblies - JavaEE EAR ............... SKIPPED
+[INFO] Daytrader plans .................................... SKIPPED
+[INFO] DayTrader :: Assemblies for Web containers ......... SKIPPED
+[INFO] DayTrader :: Assemblies - Web + Direct JDBC ........ SKIPPED
+[INFO] DayTrader :: Assemblies - Web + Direct JPA 2.2.1-eap7 SKIPPED
+[INFO] ------------------------------------------------------------------------
+
+
+15. Beans compiled but key review of code showed Serializable without implementing a serializable uid, this is important in marshalling and unmarshalling 
+where implements Serializable { 
+add this
+private static final long serialVersionUID = 7L;
+
+
+16. Entities
+Added  hibernate dependency
+<dependency>
+		  <groupId>org.hibernate</groupId>
+		  <artifactId>hibernate-core</artifactId>
+		 </dependency>
+		 
+		 persistence.xml
+		 
+		 OpenJPA is not supported and advise to use hibernate
+		 change
+		 <provider>org.apache.openjpa.persistence.PersistenceProviderImpl</provider>
+		 
+		 <provider>org.hibernate.ejb.HibernatePersistence</provider>
+		 
+		 change
+		 <persistence xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence http://xmlns.jcp.org/xml/ns/persistence/persistence_2_1.xsd"
+             version="2.1">
+             
+             comment these in first iteration - revisit
+             <property name="openjpa.DynamicEnhancementAgent" value="false"/>
+            <property name="openjpa.BrokerImpl" value="non-finalizing" />
+            <property name="openjpa.jdbc.SynchronizeMappings" value="buildSchema(ForeignKeys=true)"/>
+            <property name="openjpa.Sequence" value="table(Table=OPENJPASEQ, Increment=100)"/>
+            
+            replace with
+            
+          
+            sequences need to be examined, openjpa to hibernate can be challenging for complex queuries
+            
+            insert here - 
+             
+<persistence xmlns="http://java.sun.com/xml/ns/persistence" version="1.0">
+
+		 
+17. Core & ejb3 : 5 mins
+
+Dependency needed
+ <dependency>
+			<groupId>javax</groupId>
+			<artifactId>javaee-api</artifactId>
+			<version>7.0</version>
+			<scope>provided</scope>
+		</dependency>
+		
+
+18. ejb3 - persistence xml update
+- jboss.xml - revisit until compiled
+
+19. Maintain WSDL - rework this with annotations
+https://access.redhat.com/documentation/en-us/red_hat_jboss_enterprise_application_platform/7.1/html/developing_web_services_applications/developing_jax_ws_web_services
+
+Top-down use cases:
+
+Replacing the implementation of an existing web service, and you can not break compatibility with older clients.
+Exposing a service that conforms to a contract specified by a third party, for example, a vendor that calls you back using an already defined protocol.
+Creating a service that adheres to the XML Schema and WSDL you developed by hand up front.
+
+$ EAP_HOME/bin/wsconsume.sh -k EchoService.wsdl
+
+
+bfarr-osx:minimigration bfarr$ ./jboss-eap-7.1/bin/wsconsume.sh -k TradeServices.wsdl 
+
+20.
+
+Create new module webservice to provide implementation - copy the wsdl and run 
+/jboss-eap-7.1/bin/wsconsume.sh -k -o . ../resources/TradeServices.wsdl 
+Could not find log4j.properties or log4j.xml configuration, logging to console.
+
+Loading FrontEnd jaxws ...
+Loading DataBinding jaxb ...
+wsdl2java -compile -exsh false -d /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/webservice/src/main/java/. -verbose -classdir /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/webservice/src/main/java/. -allowElementReferences file:/Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/webservice/src/main/java/../resources/TradeServices.wsdl
+wsdl2java - Apache CXF 3.1.12.redhat-1
+
+change wsdl location
+  wsdlLocation = "classpath:TradeServices.wsdl",
+  
+21.
+add jee dependency and recompile
+
+[ERROR] /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/src/main/java/org/apache/geronimo/samples/daytrader/web/TradeServletAction.java:[24,1] package org.apache.geronimo.samples.daytrader.soap does not exist
+[ERROR] /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/src/main/java/org/apache/geronimo/samples/daytrader/web/TradeServletAction.java:[51,43] cannot find symbol
+[ERROR]   symbol:   class TradeWebSoapProxy
+[ERROR]   location: class org.apache.geronimo.samples.daytrader.web.TradeServletAction
+[ERROR] -> [Help 1]
+[ERROR] 
+
+Servlet is calling webservice
+
+
+22. 3:00 hrs
+
+
+Change TradeServices in core to remove Remote references, this will 
+
+Remove SOAP and WSAPPCLient to be rewritten - Create an implementation class and rewrite
+
+https://access.redhat.com/documentation/en-us/red_hat_jboss_enterprise_application_platform/7.1/html/developing_web_services_applications/developing_jax_ws_web_services#ws_clients
+
+
+23.
+
+After refactoring proxy client
+
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary:
+[INFO] 
+[INFO] DayTrader :: Performance Benchmark Sample 2.2.1-eap7 SUCCESS [  0.442 s]
+[INFO] DayTrader :: Modules ............................... SUCCESS [  0.012 s]
+[INFO] DayTrader :: Modules - Util ........................ SUCCESS [  1.392 s]
+[INFO] DayTrader :: Modules - Beans ....................... SUCCESS [  0.224 s]
+[INFO] DayTrader :: Modules - Entities .................... SUCCESS [  0.270 s]
+[INFO] DayTrader :: Modules - Core ........................ SUCCESS [  0.664 s]
+[INFO] DayTrader :: Modules - EJB3 ........................ SUCCESS [  0.843 s]
+[INFO] DayTrader :: Modules - webservices ................. SUCCESS [  0.286 s]
+[INFO] DayTrader :: Modules - SOAP ........................ SUCCESS [  0.240 s]
+[INFO] DayTrader :: Modules - Web ......................... SUCCESS [  0.446 s]
+[INFO] DayTrader :: Modules - Quote Streamer .............. SUCCESS [  0.237 s]
+[INFO] DayTrader :: Modules - JSON Proxy .................. FAILURE [  0.113 s]
+[INFO] DayTrader :: Assemblies ............................ SKIPPED
+[INFO] DayTrader :: Assemblies for JavaEE ................. SKIPPED
+[INFO] DayTrader :: Assemblies - JavaEE WAR ............... SKIPPED
+[INFO] DayTrader :: Assemblies - JavaEE EAR ............... SKIPPED
+[INFO] Daytrader plans .................................... SKIPPED
+[INFO] DayTrader :: Assemblies for Web containers ......... SKIPPED
+[INFO] DayTrader :: Assemblies - Web + Direct JDBC ........ SKIPPED
+[INFO] DayTrader :: Assemblies - Web + Direct JPA 2.2.1-eap7 SKIPPED
+[INFO] ------------------------------------------------------------------------
+
+
+24. Add jee 7 dependency for JSON Proxy
+
+25.
+day-trader.war details
+remove geronimo-web.xml and jboss-web.xml
+remove webservices.xml
+remove TradeSerives_mapping.xml, TradeServicesClient_mapping.xml
+
+web.xml
+- 
+
+
+26. JMS Queues needed
+jms/TradeBrokerQueue
+jms/TradeStreamerTopic
+
+27. Datasources needed to setup
+jdbc/TradeDataSource
+
+28. Day Trade EAR
+pom.xml change ear plugin 
+ <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-ear-plugin</artifactId>
+                <configuration>
+                    <displayName>DayTrader EAR</displayName>
+                    <description>DayTrader Stock Trading Performance Benchmark Sample</description>
+                    <version>5</version>
+                    <modules>
+                        <javaModule>
+                        
+                        to
+
+to 
+<configuration>
+                    <displayName>DayTrader EAR</displayName>
+                    <description>DayTrader Stock Trading Performance Benchmark Sample</description>
+                    <version>7</version>
+                    <defaultLibBundleDir>lib</defaultLibBundleDir>
+                    <fileNameMapping>no-version</fileNameMapping>
+                    <skinnyWars>true</skinnyWars>
+                </configuration>
+                
+29. BUild completes ! 
+
+30. Now examine the libs within the ear to understand where some libs are implicitly provided by JBOSS 7 or through a module
+
+list under the target directory
+
+antlr-antlr-2.7.7.redhat-7.jar							
+com.fasterxml-classmate-1.3.3.redhat-1.jar					
+com.sun.xml.bind-jaxb-core-2.2.11.jar						
+com.sun.xml.bind-jaxb-impl-2.2.11.jar						
+dom4j-dom4j-1.6.1.redhat-7.jar							
+org.apache.geronimo.specs-geronimo-jta_1.1_spec-1.1.1.jar
+org.apache.cxf-cxf-core-3.1.12.redhat-1.jar					
+org.apache.neethi-neethi-3.0.3.redhat-1.jar
+org.apache.cxf-cxf-rt-bindings-soap-3.1.12.redhat-1.jar				
+org.apache.ws.xmlschema-xmlschema-core-2.2.1.redhat-1.jar
+org.apache.cxf-cxf-rt-bindings-xml-3.1.12.redhat-1.jar				
+org.codehaus.woodstox-stax2-api-3.1.4.redhat-1.jar
+org.apache.cxf-cxf-rt-databinding-jaxb-3.1.12.redhat-1.jar			
+org.codehaus.woodstox-woodstox-core-asl-4.4.1.jar
+org.apache.cxf-cxf-rt-frontend-jaxws-3.1.12.redhat-1.jar			
+org.hibernate-hibernate-core-5.1.10.Final-redhat-1.jar
+org.apache.cxf-cxf-rt-frontend-simple-3.1.12.redhat-1.jar			
+org.hibernate.common-hibernate-commons-annotations-5.0.1.Final-redhat-2.jar
+org.apache.cxf-cxf-rt-ws-addr-3.1.12.redhat-1.jar				
+org.hibernate.javax.persistence-hibernate-jpa-2.1-api-1.0.0.Final-redhat-2.jar
+org.apache.cxf-cxf-rt-ws-policy-3.1.12.redhat-1.jar				
+org.javassist-javassist-3.20.0.GA-redhat-3.jar
+org.apache.cxf-cxf-rt-wsdl-3.1.12.redhat-1.jar					
+org.jboss-jandex-2.0.3.Final-redhat-1.jar
+org.jboss.logging-jboss-logging-3.3.1.Final-redhat-1.jar	
+org.ow2.asm-asm-5.0.4.jar	
+wsdl4j-wsdl4j-1.6.3.redhat-2.jar	
+xml-resolver-xml-resolver-1.2.0.redhat-11.jar
+
+31. 
+Jboss deployment structure
+https://access.redhat.com/documentation/en-us/red_hat_jboss_enterprise_application_platform/7.1/html/development_guide/class_loading_and_modules
+
+For the most part its not needed but good practice as it 
+See 3.9.1. Implicit Module Dependencies
+
+https://access.redhat.com/articles/2158031
+
+Look at directory at modules/layers/system/base
+
+
+
+32. also another way is simply trying to deploy it
+3:25:35,764 INFO  [org.jboss.as.jpa] (MSC service thread 1-4) WFLYJPA0002: Read persistence.xml for daytrader
+13:25:35,808 ERROR [org.jboss.msc.service.fail] (MSC service thread 1-5) MSC000001: Failed to start service jboss.deployment.subunit."daytrader-ear-2.2.1-eap7.ear"."org.apache.geronimo.daytrader.modules-daytrader-ejb3-2.2.1-eap7.jar".PARSE: org.jboss.msc.service.StartException in service jboss.deployment.subunit."daytrader-ear-2.2.1-eap7.ear"."org.apache.geronimo.daytrader.modules-daytrader-ejb3-2.2.1-eap7.jar".PARSE: WFLYSRV0153: Failed to process phase PARSE of subdeployment "org.apache.geronimo.daytrader.modules-daytrader-ejb3-2.2.1-eap7.jar" of deployment "daytrader-ear-2.2.1-eap7.ear"
+	at org.jboss.as.server.deployment.DeploymentUnitPhaseService.start(DeploymentUnitPhaseService.java:172)
+	at org.jboss.msc.service.ServiceControllerImpl$StartTask.startService(ServiceControllerImpl.java:2032)
+	at org.jboss.msc.service.ServiceControllerImpl$StartTask.run(ServiceControllerImpl.java:1955)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)
+Caused by: org.jboss.msc.service.ServiceNotFoundException: Service service jboss.ejb.default-resource-adapter-name-service not found
+	at org.jboss.msc.service.ServiceContainerImpl.getRequiredService(ServiceContainerImpl.java:669)
+	at org.jboss.as.ejb3.deployment.processors.MessageDrivenComponentDescriptionFactory.getDefaultResourceAdapterName(MessageDrivenComponentDescriptionFactory.java:274)
+	at org.jboss.as.ejb3.deployment.processors.MessageDrivenComponentDescriptionFactory.processMessageBeans(MessageDrivenComponentDescriptionFactory.java:154)
+	at org.jboss.as.ejb3.deployment.processors.MessageDrivenComponentDescriptionFactory.processAnnotations(MessageDrivenComponentDescriptionFactory.java:81)
+	at org.jboss.as.ejb3.deployment.processors.AnnotatedEJBComponentDescriptionDeploymentUnitProcessor.processAnnotations(AnnotatedEJBComponentDescriptionDeploymentUnitProcessor.java:57)
+	at org.jboss.as.ejb3.deployment.processors.AbstractDeploymentUnitProcessor.deploy(AbstractDeploymentUnitProcessor.java:76)
+	at org.jboss.as.server.deployment.DeploymentUnitPhaseService.start(DeploymentUnitPhaseService.java:165)
+	... 5 more
+
+13:25:35,920 ERROR [org.jboss.as.controller.management-operation] (DeploymentScanner-threads - 1) WFLYCTL0013: Operation ("deploy") failed - address: ([("deployment" => "daytrader-ear-2.2.1-eap7.ear")]) - failure description: {"WFLYCTL0080: Failed services" => {"jboss.deployment.subunit.\"daytrader-ear-2.2.1-eap7.ear\".\"org.apache.geronimo.daytrader.modules-daytrader-ejb3-2.2.1-eap7.jar\".PARSE" => "WFLYSRV0153: Failed to process phase PARSE of subdeployment \"org.apache.geronimo.daytrader.modules-daytrader-ejb3-2.2.1-eap7.jar\" of deployment \"daytrader-ear-2.2.1-eap7.ear\"
+    Caused by: org.jboss.msc.service.ServiceNotFoundException: Service service jboss.ejb.default-resource-adapter-name-service not found"}}
+
+
+can see error on deployment is with ejb-jar
+delete ejb-jar.xml - not required
+remove this
+<plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-ejb-plugin</artifactId>
+                <configuration>
+                    <generateClient>true</generateClient>
+                    <archive>
+                        <manifestEntries>
+                            <Class-Path>wsappclient.jar</Class-Path>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+        
+        
+        https://access.redhat.com/documentation/en-us/red_hat_jboss_enterprise_application_platform/7.1/html-single/developing_ejb_applications/index
+        
+        https://developers.redhat.com/blog/2017/06/14/coding-ejb-clients-for-jboss-eap-7-1/
+        
+  needed to remove duplicate persistence.xml files      
+        
+34.
+Errors on deployment around definitions of queues
+ Caused by: org.jboss.as.server.deployment.DeploymentUnitProcessingException: WFLYEE0092: 
+ No message destination with name dt-ejb.jar#jms/TradeBrokerQueue for binding java:module/env/jms/TradeBrokerQueue"},
+
+Lets create the queues - 
+
+35.
+https://access.redhat.com/documentation/en-us/red_hat_jboss_enterprise_application_platform/7.0/html/configuring_messaging/getting_started#intro_messaging_config
+               
+add to standalone.xml
+
+36.
+
+
+Chnaged datasources to compliant with jboss style datasources
+ <jta-data-source>java:jboss/datasources/TradeDataSource</jta-data-source>  
+        <non-jta-data-source>java:jboss/datasources/NoTxTradeDataSource</non-jta-data-source> 
+        
+ Add properties for H2 database
+ <property name="connection.driver_class" value="org.h2.Driver"/>
+	        <property name="hibernate.dialect" value="org.hibernate.dialect.H2Dialect"/>
+	        <property name="hibernate.hbm2ddl.auto" value="create-drop"/>
+	        <property name="hibernate.show_sql" value="true" />
+	               
+37.
+
+See ejbs now installed, note naming conventions - check exported
+08:57:08,214 INFO  [org.jboss.as.ejb3.deployment] (MSC service thread 1-3) WFLYEJB0473: JNDI bindings for session bean named 'TradeSLSBBean' in deployment unit 'subdeployment "org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7.war" of deployment "daytrader-ear-2.2.1-eap7.ear"' are as follows:
+
+	java:global/daytrader-ear-2.2.1-eap7/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBLocal
+	java:app/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBLocal
+	java:module/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBLocal
+	java:global/daytrader-ear-2.2.1-eap7/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBRemote
+	java:app/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBRemote
+	java:module/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBRemote
+	java:jboss/exported/daytrader-ear-2.2.1-eap7/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBRemote
+
+08:57:08,214 INFO  [org.jboss.as.ejb3.deployment] (MSC service thread 1-3) WFLYEJB0473: JNDI bindings for session bean named 'DirectSLSBBean' in deployment unit 'subdeployment "org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7.war" of deployment "daytrader-ear-2.2.1-eap7.ear"' are as follows:
+
+	java:global/daytrader-ear-2.2.1-eap7/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/DirectSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBRemote
+	java:app/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/DirectSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBRemote
+	java:module/DirectSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBRemote
+	java:jboss/exported/daytrader-ear-2.2.1-eap7/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/DirectSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBRemote
+	java:global/daytrader-ear-2.2.1-eap7/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/DirectSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBLocal
+	java:app/org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7/DirectSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBLocal
+	java:module/DirectSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBLocal
+
+
+38. 
+
+Caused by: org.jboss.as.server.deployment.DeploymentUnitProcessingException: WFLYEJB0408: More than one EJB found with interface of type 'org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBRemote' for binding java:module/TradeSLSBBean!org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBRemote. F
+
+name the EJB
+
+ensure the ejb is not included in the war and marked as provided, check skinny wars
+
+
+39.
+10:17:00,109 ERROR [org.jboss.as.controller.management-operation] (DeploymentScanner-threads - 2) WFLYCTL0013: Operation ("full-replace-deployment") failed - address: ([]) - failure description: {
+    "WFLYCTL0412: Required services that are not installed:" => [
+        "jboss.naming.context.java.jboss.resources.jms.TopicConnectionFactory",
+        "jboss.naming.context.java.jboss.resources.jms.QueueConnectionFactory"
+    ],
+    "WFLYCTL0180: Services with missing/unavailable dependencies" => [
+        "jboss.naming.context.java.module.\"daytrader-ear-2.2.1-eap7\".\"org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7\".env.jms.TopicConnectionFactory is missing [jboss.naming.context.java.jboss.resources.jms.TopicConnectionFactory]",
+        "jboss.naming.context.java.module.\"daytrader-ear-2.2.1-eap7\".\"org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7\".env.jms.QueueConnectionFactory is missing [jboss.naming.context.java.jboss.resources.jms.QueueConnectionFactory]"
+    ]
+}
+
+JBOSS has 
+remove this
+TopicConnectionFactory
+    
+    <resource-ref>
+        <res-ref-name>jdbc/TradeDataSource</res-ref-name>
+        <res-type>javax.sql.DataSource</res-type>
+        <res-auth>Container</res-auth>
+        <res-sharing-scope>Shareable</res-sharing-scope>
+    </resource-ref>
+    <resource-ref>
+        <res-ref-name>jms/QueueConnectionFactory</res-ref-name>
+        <res-type>javax.jms.QueueConnectionFactory</res-type>
+        <res-auth>Application</res-auth>
+        <res-sharing-scope>Shareable</res-sharing-scope>
+    </resource-ref>
+    <resource-ref>
+        <res-ref-name>jms/TopicConnectionFactory</res-ref-name>
+        <res-type>javax.jms.TopicConnectionFactory</res-type>
+        <res-auth>Application</res-auth>
+        <res-sharing-scope>Shareable</res-sharing-scope>
+    </resource-ref>
+    
+40
+
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+	at java.lang.Thread.run(Thread.java:748)
+Caused by: java.lang.ClassNotFoundException: org.apache.geronimo.samples.daytrader.soap.TradeWSAction from [Module "deployment.daytrader-ear-2.2.1-eap7.ear.org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7.war" from Service Module Loader]
+	at org.jboss.modules.ModuleClassLoader.findClass(ModuleClassLoader.java:198)
+	at org.jboss.modules.ConcurrentClassLoader.performLoadClassUnchecked(ConcurrentClassLoader.java:412)
+	at org.jboss.modules.ConcurrentClassLoader.performLoadClass(ConcurrentClassLoader.java:400)
+	at org.jboss.modules.ConcurrentClassLoader.loadClass(ConcurrentClassLoader.java:116)
+	at org.wildfly.extension.undertow.deployment.UndertowDeploymentInfoService.createServletConfig(UndertowDeploymentInfoService.java:725)
+	... 6 more
+
+
+remove reference to servlet
+
+41.
+
+10:46:30,065 ERROR [org.apache.geronimo.samples.daytrader.util.Log] (ServerService Thread Pool -- 105) Error: TradeDirect:init -- error on JNDI lookups of DataSource -- TradeDirect will not work
+	javax.naming.NameNotFoundException: env/jdbc/TradeDataSource -- service jboss.naming.context.java.module."daytrader-ear-2.2.1-eap7"."org.apache.geronimo.daytrader.assemblies.javaee-daytrader-war-2.2.1-eap7".env.jdbc.TradeDataSource
+
+
+
+Advice - better to break and fix it, ie. prefer to remove and reinstate 
+
+
+42. Datasource name
+public static String DATASOURCE = "java:comp/env/jdbc/TradeDataSource";
+
+change to 
+ static String DATASOURCE = "java:jboss/datasources/TradeDataSource";
+ 
+43.
+in public class TradeJEEDirect implements TradeServices, TradeDBServices {
+10:53:52,100 INFO  [org.apache.activemq.artemis.ra] (default-threads - 6) AMQ151000: awaiting topic/queue creation TradeBrokerQueue
+10:53:52,106 ERROR [org.apache.geronimo.samples.daytrader.util.Log] (ServerService Thread Pool -- 119) Error: TradeDirect:init  Unable to locate TradeBrokerQueue.
+	 -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled
+10:53:52,106 ERROR [org.apache.geronimo.samples.daytrader.util.Log] (ServerService Thread Pool -- 119) Error: TradeDirect:init  Unable to locate TradeStreamerTopic.
+	 -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled
+	 hardcoding of name
+queue = (Queue) context.lookup("java:comp/env/jms/TradeBrokerQueue");
+
+ 44. Connection factory lookup
+ <connection-factory name="InVmConnectionFactory" entries="java:/ConnectionFactory" connectors="in-vm"/>
+  qConnFactory = (ConnectionFactory) context.lookup("java:comp/env/jms/QueueConnectionFactory");
+  change to
+  tConnFactory = (ConnectionFactory) context.lookup("java:/ConnectionFactory");
+  
+45.
+  
+  11:07:41,600 INFO  [org.apache.activemq.artemis.ra] (default-threads - 7) AMQ151001: Attempting to reconnect org.apache.activemq.artemis.ra.inflow.ActiveMQActivationSpec(ra=org.wildfly.extension.messaging.activemq.ActiveMQResourceAdapter@2bd07716 destination=TradeBrokerQueue destinationType=javax.jms.Queue ack=Auto-acknowledge durable=false clientID=null user=null maxSession=15)
+  change to add jms/
+          @ActivationConfigProperty(propertyName = "destination", propertyValue = "jms/TradeBrokerQueue"),
+          
+46.
+ trade = (TradeServices) context.lookup("java:comp/env/ejb/TradeSLSBBean");           
+ change lookup
+ 
+ 
+ 47.
+ 
+ Prefer injection on EJB3 code, replace TradeAction with 
+  @EJB
+    private TradeSLSBRemote tradeSLSBRemote;
+    @EJB
+    private DirectSLSBRemote directSLSBRemote;
+    
+    
+    trade = (TradeServices) tradeSLSBRemote;
+        	/*
+            try {
+                Class c = Class.forName("org.apache.geronimo.samples.daytrader.ejb3.TradeSLSBRemote");
+                if ((trade == null) ||
+                    (!(trade.getClass().isAssignableFrom(c)))) {
+                    InitialContext context = new InitialContext();
+                    try {
+                        trade = (TradeServices) context.lookup("java:comp/env/ejb/TradeSLSBBean");                
+                    } catch (Exception ex) {
+                        Log.error("TradeAction:createTrade - Lookup of TradeSLSBRemote failed!!!");
+                        trade = (TradeServices) context.lookup("TradeSLSBBean");
+                    }
+                }
+            }
+            catch (Exception e) {
+                Log.error("TradeAction:TradeAction() Creation of Trade EJB 3 failed\n" + e);
+                re = new RuntimeException(e);
+            }
+            */
+        } else if (TradeConfig.runTimeMode == TradeConfig.SESSION3) {
+        	trade = (TradeServices) directSLSBRemote;
+        	/*
+            try {
+                Class c = Class.forName("org.apache.geronimo.samples.daytrader.ejb3.DirectSLSBBean");
+                if ((trade == null) ||
+                    (!(trade.getClass().isAssignableFrom(c)))) {
+                    InitialContext context = new InitialContext();
+                    try {
+                        trade = (TradeServices) context.lookup("java:comp/env/ejb/DirectSLSBBean");                
+                    } catch (Exception ex) {
+                        Log.error("TradeAction:createTrade - Lookup of DirectSLSBRemote failed!!!");
+                        trade = (TradeServices) context.lookup("DirectSLSBBean");
+                    }
+                }
+            }
+            catch (Exception e) {
+                Log.error("TradeAction:TradeAction() Creation of Trade SESSION3 failed\n" + e);
+                re = new RuntimeException(e);
+            }
+            */
+            
+ TradeAction is a problem as its not in the right area, doing a class.forname should bne got ridden of
+ 
+ when introducing EJB3 it caused a maven cyclic dependency, so this needs to be refactored
+ This clearly belongs in the web application jar given all references that use it are in web and web already relies on 
+ core
+            
+ 
+8bINitial Maven errors
+[WARNING] 'build.plugins.plugin.version' for org.apache.felix:maven-bundle-plugin is missing. @ org.apache.geronimo.daytrader.modules:daytrader-util:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/util/pom.xml, line 60, column 21
+[ERROR] Unknown packaging: bundle @ org.apache.geronimo.daytrader.modules:daytrader-util:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/util/pom.xml, line 29, column 16
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-util:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/util/pom.xml, line 40, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-util:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/util/pom.xml, line 45, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.felix:maven-bundle-plugin is missing. @ org.apache.geronimo.daytrader.modules:daytrader-beans:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/beans/pom.xml, line 152, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] Unknown packaging: bundle @ org.apache.geronimo.daytrader.modules:daytrader-beans:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/beans/pom.xml, line 29, column 16
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-beans:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/beans/pom.xml, line 73, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-beans:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/beans/pom.xml, line 78, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.felix:maven-bundle-plugin is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 146, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] Unknown packaging: bundle @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 29, column 16
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jms_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 46, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 51, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 56, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-annotation_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 61, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 66, column 21
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 71, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 76, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.openjpa:openjpa:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-entities:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/entities/pom.xml, line 81, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.felix:maven-bundle-plugin is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 187, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] Unknown packaging: bundle @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 29, column 16
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 71, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jms_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 76, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 81, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-annotation_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 86, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 91, column 21
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 96, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 101, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.openjpa:openjpa:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-core:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/core/pom.xml, line 106, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.maven.plugins:maven-ejb-plugin is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 118, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jms_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 68, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 73, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 78, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-annotation_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 83, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 88, column 21
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 93, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 98, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.openjpa:openjpa:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-ejb3:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/ejb3/pom.xml, line 103, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.maven.plugins:maven-jar-plugin is missing. @ org.apache.geronimo.daytrader.modules:wsappclient:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/wsappclient/pom.xml, line 48, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jaxrpc_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:wsappclient:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/wsappclient/pom.xml, line 40, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-soap:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/soap/pom.xml, line 72, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jms_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-soap:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/soap/pom.xml, line 77, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-soap:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/soap/pom.xml, line 82, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-soap:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/soap/pom.xml, line 87, column 21
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-soap:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/soap/pom.xml, line 92, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-soap:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/soap/pom.xml, line 97, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.openjpa:openjpa:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-soap:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/soap/pom.xml, line 102, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 69, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 74, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 79, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jms_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 84, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-annotation_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 89, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-servlet_2.5_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 94, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jsp_2.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 99, column 21
+[ERROR] 'dependencies.dependency.version' for javax.servlet:jstl:jar is missing. @ org.apache.geronimo.daytrader.modules:daytrader-web:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/web/pom.xml, line 104, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.maven.plugins:maven-jar-plugin is missing. @ org.apache.geronimo.daytrader.modules:streamer:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/streamer/pom.xml, line 93, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jms_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:streamer:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/streamer/pom.xml, line 64, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:streamer:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/streamer/pom.xml, line 69, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:streamer:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/streamer/pom.xml, line 74, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-annotation_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.modules:streamer:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/streamer/pom.xml, line 79, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.openjpa:openjpa:jar is missing. @ org.apache.geronimo.daytrader.modules:streamer:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/streamer/pom.xml, line 84, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.maven.plugins:maven-war-plugin is missing. @ org.apache.geronimo.daytrader:json-proxy:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/json-proxy/pom.xml, line 64, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jaxrpc_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader:json-proxy:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/json-proxy/pom.xml, line 40, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-servlet_2.5_spec:jar is missing. @ org.apache.geronimo.daytrader:json-proxy:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/json-proxy/pom.xml, line 45, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jsp_2.1_spec:jar is missing. @ org.apache.geronimo.daytrader:json-proxy:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/json-proxy/pom.xml, line 50, column 21
+[ERROR] 'dependencies.dependency.version' for javax.servlet:jstl:jar is missing. @ org.apache.geronimo.daytrader:json-proxy:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/json-proxy/pom.xml, line 55, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.maven.plugins:maven-war-plugin is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 157, column 21
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 78, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-ejb_3.0_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 83, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 88, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jms_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 93, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-annotation_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 98, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-servlet_2.5_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 103, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jsp_2.1_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 108, column 21
+[ERROR] 'dependencies.dependency.version' for javax.servlet:jstl:jar is missing. @ org.apache.geronimo.daytrader.assemblies.javaee:daytrader-war:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/javaee/daytrader-war/pom.xml, line 113, column 21
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] 'build.plugins.plugin.version' for org.apache.maven.plugins:maven-war-plugin is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jdbc:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jdbc/pom.xml, line 118, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.felix:maven-bundle-plugin is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jdbc:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jdbc/pom.xml, line 143, column 21
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.artifactId} is deprecated. Please use ${project.artifactId} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jdbc:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jdbc/pom.xml, line 55, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-servlet_2.5_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jdbc:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jdbc/pom.xml, line 62, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jsp_2.1_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jdbc:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jdbc/pom.xml, line 67, column 21
+[ERROR] 'dependencies.dependency.version' for javax.servlet:jstl:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jdbc:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jdbc/pom.xml, line 72, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jdbc:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jdbc/pom.xml, line 79, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.maven.plugins:maven-war-plugin is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 146, column 21
+[WARNING] 'build.plugins.plugin.version' for org.apache.felix:maven-bundle-plugin is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 171, column 21
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${version} is deprecated. Please use ${project.version} instead. @ 
+[WARNING] The expression ${pom.artifactId} is deprecated. Please use ${project.artifactId} instead. @ 
+[WARNING] The expression ${pom.version} is deprecated. Please use ${project.version} instead. @ 
+[ERROR] 'dependencies.dependency.version' for commons-logging:commons-logging:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 55, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-servlet_2.5_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 62, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jsp_2.1_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 67, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jta_1.1_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 72, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.geronimo.specs:geronimo-jpa_1.0_spec:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 77, column 21
+[ERROR] 'dependencies.dependency.version' for javax.servlet:jstl:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 82, column 21
+[ERROR] 'dependencies.dependency.version' for org.apache.openjpa:openjpa:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 88, column 21
+[ERROR] 'dependencies.dependency.version' for commons-dbcp:commons-dbcp:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 98, column 21
+[ERROR] 'dependencies.dependency.version' for net.sourceforge.serp:serp:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 113, column 21
+[ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 120, column 21
+

@@ -1,0 +1,1 @@
+deploy --user system --password manager deploy .target/daytrader-ear-2.0-SNAPSHOT.ear daytrader-derby-xa-plan.xml

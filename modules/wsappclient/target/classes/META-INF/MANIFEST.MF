@@ -1,0 +1,7 @@
+Manifest-Version: 1.0
+Built-By: bfarr
+Class-Path: util.jar entities.jar core.jar web.jar soap.jar dt-ejb.jar
+Build-Jdk: 1.8.0_172
+Created-By: Maven Integration for Eclipse
+Main-Class: org.apache.geronimo.samples.daytrader.client.ws.ClientApp
+
