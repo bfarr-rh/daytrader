@@ -97,7 +97,7 @@
                     <description>DayTrader Stock Trading Performance Benchmark Sample</description>
                     <version>7</version>
                     <defaultLibBundleDir>lib</defaultLibBundleDir>
-                    <skinnyWars>true</skinnyWars>
+                    <skinnyWars>false</skinnyWars>
                     <modules>
                         <webModule>
                             <groupId>org.apache.geronimo.daytrader.assemblies.javaee</groupId>

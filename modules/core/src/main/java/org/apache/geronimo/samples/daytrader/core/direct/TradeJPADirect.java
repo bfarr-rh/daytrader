@@ -22,11 +22,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 
+import javax.annotation.Resource;
+import javax.ejb.SessionContext;
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 import javax.persistence.PersistenceUnit;
 import javax.persistence.Query;
+import javax.transaction.UserTransaction;
 
 import org.apache.geronimo.samples.daytrader.beans.AccountDataBean;
 import org.apache.geronimo.samples.daytrader.beans.AccountProfileDataBean;
@@ -61,6 +64,9 @@ public class TradeJPADirect implements TradeServices, TradeDBServices {
     @PersistenceUnit(unitName="daytrader")
     private static EntityManagerFactory emf;
 
+    @Resource
+    private SessionContext sessionContext;
+    
     private static BigDecimal ZERO = new BigDecimal(0.0);
 
     private static boolean initialized = false;
@@ -470,6 +476,7 @@ public class TradeJPADirect implements TradeServices, TradeDBServices {
             Log.trace("TradeJPADirect:getClosedOrders", userID);
         EntityManager entityManager = emf.createEntityManager();
 
+        UserTransaction userTxn = sessionContext.getUserTransaction();
         try {
 
             // Get the primary keys for all the closed Orders for this
@@ -477,12 +484,16 @@ public class TradeJPADirect implements TradeServices, TradeDBServices {
             /*
              * managed transaction
              */
-            entityManager.getTransaction().begin();
+            //entityManager.getTransaction().begin();
+        	userTxn.begin();
+        	
             Query query = entityManager
                           .createNamedQuery("orderejb.closedOrders");
             query.setParameter("userID", userID);
 
-            entityManager.getTransaction().commit();
+            userTxn.commit();
+            
+            //entityManager.getTransaction().commit();
             Collection results = query.getResultList();
             Iterator itr = results.iterator();
             // entityManager.joinTransaction();
@@ -499,14 +510,17 @@ public class TradeJPADirect implements TradeServices, TradeDBServices {
                  * managed transaction
                  */
                 try {
-                    entityManager.getTransaction().begin();
+                	userTxn.begin();
+                    //entityManager.getTransaction().begin();
                     updateStatus.setParameter("userID", userID);
 
                     updateStatus.executeUpdate();
-                    entityManager.getTransaction().commit();
+                    //entityManager.getTransaction().commit();
+                    userTxn.commit();
                 }
                 catch (Exception e) {
-                    entityManager.getTransaction().rollback();
+                	 userTxn.rollback();
+                    //entityManager.getTransaction().rollback();
                     entityManager.close();
                     entityManager = null;
                 }

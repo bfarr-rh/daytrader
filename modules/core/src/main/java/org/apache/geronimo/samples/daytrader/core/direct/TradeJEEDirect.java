@@ -21,11 +21,13 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSException;
@@ -89,6 +91,8 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
     public TradeJEEDirect() {
         if (initialized == false)
             init();
+        
+        
     }
 
     public TradeJEEDirect(boolean inSession) {
@@ -96,6 +100,8 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
             init();
 
         this.inSession = inSession;
+        
+        
     }
 
     /**
@@ -588,19 +594,21 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
     }
 
     private void removeHolding(Connection conn, int holdingID, int orderID) throws Exception {
+    	
+    	// set the HoldingID to NULL for the purchase and sell order now that
+        // the holding as been removed
+        PreparedStatement stmt2 = getStatement(conn, removeHoldingFromOrderSQL);
+
+        stmt2.setInt(1, holdingID);
+        int rowCount2 = stmt2.executeUpdate();
+        stmt2.close();
+        
         PreparedStatement stmt = getStatement(conn, removeHoldingSQL);
 
         stmt.setInt(1, holdingID);
         int rowCount = stmt.executeUpdate();
         stmt.close();
 
-        // set the HoldingID to NULL for the purchase and sell order now that
-        // the holding as been removed
-        stmt = getStatement(conn, removeHoldingFromOrderSQL);
-
-        stmt.setInt(1, holdingID);
-        rowCount = stmt.executeUpdate();
-        stmt.close();
 
     }
 
@@ -704,7 +712,62 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
         }
         return orderDataBeans;
     }
+    
+    
+    /**
+     * @see TradeServices#createQuote(String, String, BigDecimal)
+     */
+    public QuoteDataBean listAllAccounts() throws Exception {
 
+        QuoteDataBean quoteData = null;
+        Connection conn = null;
+        try {
+        	System.out.println("*******************TradeDirect: listAllAccounts( - inSession(" + this.inSession + ")");
+
+
+            conn = getConn();
+            PreparedStatement stmt = getStatement(conn, getAllAccountSQL);
+
+
+            ResultSet rs = stmt.executeQuery();
+            int rowIndex = 0;
+            ResultSetMetaData rsmd = rs.getMetaData();
+            List<String> columnNames = new ArrayList<>();
+            for (int i = 1; i <= rsmd.getColumnCount(); i++) {
+                columnNames.add(rsmd.getColumnLabel(i));
+            }
+            while (rs.next()) {
+            	rowIndex++;
+            	List<Object> rowData = new ArrayList();
+                for (int i = 1; i <= rsmd.getColumnCount(); i++) {
+                    rowData.add(rs.getObject(i));
+                }
+            	System.out.printf("Row %d%n", rowIndex);
+            	for (int colIndex = 0; colIndex < rsmd.getColumnCount(); colIndex++) {
+                    String objType = "null";
+                    String objString = "";
+                    Object columnObject = rowData.get(colIndex);
+                    if (columnObject != null) {
+                        objString = columnObject.toString() + " ";
+                        objType = columnObject.getClass().getName();
+                    }
+                    System.out.printf("  %s: %s(%s)%n",
+                            columnNames.get(colIndex), objString, objType);
+                }
+            }
+            stmt.close();
+            commit(conn);
+
+            if (Log.doTrace())
+                Log.traceExit("TradeDirect:createQuote");
+        } catch (Exception e) {
+            Log.error("TradeDirect:createQuote -- error creating quote", e);
+        } finally {
+            releaseConn(conn);
+        }
+        return quoteData;
+    }
+    
     /**
      * @see TradeServices#createQuote(String, String, BigDecimal)
      */
@@ -1449,6 +1512,17 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
                 Log.traceEnter("TradeDirect:register - inSession(" + this.inSession + ")");
 
             conn = getConn();
+            
+            PreparedStatement stmt2 = getStatement(conn, createAccountProfileSQL);
+            stmt2.setString(1, userID);
+            stmt2.setString(2, password);
+            stmt2.setString(3, fullname);
+            stmt2.setString(4, address);
+            stmt2.setString(5, email);
+            stmt2.setString(6, creditcard);
+            stmt2.executeUpdate();
+            stmt2.close();
+            
             PreparedStatement stmt = getStatement(conn, createAccountSQL);
 
             Integer accountID = KeySequenceDirect.getNextID(conn, "account", inSession, getInGlobalTxn());
@@ -1469,15 +1543,7 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
             stmt.executeUpdate();
             stmt.close();
 
-            stmt = getStatement(conn, createAccountProfileSQL);
-            stmt.setString(1, userID);
-            stmt.setString(2, password);
-            stmt.setString(3, fullname);
-            stmt.setString(4, address);
-            stmt.setString(5, email);
-            stmt.setString(6, creditcard);
-            stmt.executeUpdate();
-            stmt.close();
+            
 
             commit(conn);
 
@@ -1949,6 +2015,8 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
     private static final String logoutSQL =
         "update accountejb set logoutcount=logoutcount+1 " + "where profile_userid=?";
 
+    private static final String getAllAccountSQL = "select * from accountprofileejb a ";
+    
     private static final String getAccountSQL = "select * from accountejb a where a.accountid = ?";
 
     private static final String getAccountForUpdateSQL = "select * from accountejb a where a.accountid = ? for update";
@@ -2071,6 +2139,8 @@ public class TradeJEEDirect implements TradeServices, TradeDBServices {
             Log.trace("TradeDirect:init -- +++ initialized");
 
         initialized = true;
+        
+        
     }
 
     public static void destroy() {

@@ -42,6 +42,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
         <siteId>daytrader</siteId>
 		<maven-compiler-plugin-version>3.8.0</maven-compiler-plugin-version>
 		<maven-ear-plugin-version>3.0.1</maven-ear-plugin-version>
+		<maven-war-plugin-version>3.1.0</maven-war-plugin-version>
 		<maven-enforcer-plugin-version>3.0.0-M2</maven-enforcer-plugin-version>
 <!--
         <gbeanDeployerBootstrap>org.apache.geronimo.framework/geronimo-gbean-deployer-bootstrap/${geronimoVersion}/car</gbeanDeployerBootstrap>
@@ -285,10 +286,14 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/ma
 
  			<plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-earr-plugin</artifactId>
+                <artifactId>maven-ear-plugin</artifactId>
                 <version>${maven-ear-plugin-version}</version>
             </plugin>
-            
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>${maven-war-plugin-version}</version>
+            </plugin>
 
         </plugins>
     </build>

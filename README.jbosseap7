@@ -579,7 +579,8 @@ queue = (Queue) context.lookup("java:comp/env/jms/TradeBrokerQueue");
  when introducing EJB3 it caused a maven cyclic dependency, so this needs to be refactored
  This clearly belongs in the web application jar given all references that use it are in web and web already relies on 
  core
-            
+
+In this case we did some refactoring and             
  
 8bINitial Maven errors
 [WARNING] 'build.plugins.plugin.version' for org.apache.felix:maven-bundle-plugin is missing. @ org.apache.geronimo.daytrader.modules:daytrader-util:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/modules/util/pom.xml, line 60, column 21
@@ -724,3 +725,19 @@ queue = (Queue) context.lookup("java:comp/env/jms/TradeBrokerQueue");
 [ERROR] 'dependencies.dependency.version' for net.sourceforge.serp:serp:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 113, column 21
 [ERROR] 'dependencies.dependency.version' for junit:junit:jar is missing. @ org.apache.geronimo.daytrader.assemblies.web:daytrader-web-jpa:[unknown-version], /Users/bfarr/projects/minimigration/daytrader-2.2.1-eap7/daytrader-2.2.1/assemblies/web/daytrader-web-jpa/pom.xml, line 120, column 21
 
+60.
+More errors changed some code to manage foreign keys for H2
+
+61.
+14:41:49,040 INFO  [stdout] (default task-70) Caused by: java.lang.IllegalStateException: A JTA EntityManager cannot use getTransaction()
+14:41:49,040 INFO  [stdout] (default task-70) 	at org.hibernate.jpa.spi.AbstractEntityManagerImpl.getTransaction(AbstractEntityManagerImpl.java:1333)
+14:41:49,040 INFO  [stdout] (default task-70) 	at org.apache.geronimo.samples.daytrader.core.direct.TradeJPADirect.getClosedOrders(TradeJPADirect.java:480)
+
+ entityManager.getTransaction().begin();
+            Query query = entityManager
+                          .createNamedQuery("orderejb.closedOrders");
+            query.setParameter("userID", userID);
+
+            entityManager.getTransaction().commit();
+            
+            
